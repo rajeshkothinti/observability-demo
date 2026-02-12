@@ -1,0 +1,13 @@
+# Pin setuptools<82: setuptools 82+ removed pkg_resources (required by OpenTelemetry instrumentation)
+setuptools>=65.0.0,<82
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+httpx==0.26.0
+
+# OpenTelemetry
+opentelemetry-api==1.22.0
+opentelemetry-sdk==1.22.0
+opentelemetry-exporter-otlp-proto-grpc==1.22.0
+opentelemetry-instrumentation-fastapi==0.43b0
+opentelemetry-instrumentation-httpx==0.43b0
+opentelemetry-instrumentation-logging==0.43b0

@@ -1,0 +1,32 @@
+# Grafana datasources: Jaeger, Prometheus, Elasticsearch (logs)
+# Containers use service names: jaeger, prometheus, elasticsearch
+
+apiVersion: 1
+
+datasources:
+  - name: Jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686
+    isDefault: false
+    editable: false
+
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+
+  - name: Elasticsearch
+    type: elasticsearch
+    access: proxy
+    url: http://elasticsearch:9200
+    isDefault: false
+    editable: false
+    jsonData:
+      timeField: "@timestamp"
+      esVersion: "8.0.0"
+      logMessageField: Body
+      logLevelField: SeverityText
+    database: "otel-logs"

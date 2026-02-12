@@ -1,0 +1,142 @@
+.*
+!.gitignore
+
+*.md
+!README.md
+
+# -------------------------------------------
+# Python
+# -------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+env/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# -------------------------------------------
+# Go
+# -------------------------------------------
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+go.work
+vendor/
+# Compiled binary (if named same as folder)
+inventory-service/inventory-service
+
+# -------------------------------------------
+# Java / Maven
+# -------------------------------------------
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+.mvn/
+mvnw
+mvnw.cmd
+*.iml
+.idea/
+
+# -------------------------------------------
+# Node.js
+# -------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn
+dist/
+*.tsbuildinfo
+
+# -------------------------------------------
+# Docker
+# -------------------------------------------
+# Don't ignore Dockerfiles, but ignore build artifacts
+*.tar
+docker-compose.override.yml
+
+# -------------------------------------------
+# IDE / Editors
+# -------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# -------------------------------------------
+# OS Generated
+# -------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# -------------------------------------------
+# Logs and temp files
+# -------------------------------------------
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+
+# -------------------------------------------
+# Environment and secrets
+# -------------------------------------------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+credentials.json
+secrets.yaml
+
+# -------------------------------------------
+# Data volumes (created by Docker)
+# -------------------------------------------
+data/
+elasticsearch_data/
+prometheus_data/
+grafana_data/
+
+# -------------------------------------------
+# Traces (local development artifacts)
+# -------------------------------------------
+traces/

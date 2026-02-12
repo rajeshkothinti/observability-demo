@@ -1,0 +1,18 @@
+# Prometheus: scrape metrics from the OTEL Collector (which receives from Python & Go via OTLP)
+# If you prefer scraping apps directly, add host.docker.internal and scrape :8000/metrics, :8080/metrics
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # OTEL Collector exposes merged metrics from both services (received via OTLP)
+  - job_name: 'otel-collector'
+    static_configs:
+      - targets: ['otel-collector:8889']
+    metrics_path: /metrics
+
+  # Optional: scrape Prometheus itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

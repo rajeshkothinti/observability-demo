@@ -1,0 +1,52 @@
+# OpenTelemetry Collector: receive OTLP from Python & Go, export to Jaeger and Prometheus (scrape)
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+exporters:
+  # Traces → Jaeger (OTLP)
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # Metrics → expose for Prometheus scrape (collector pulls from apps via OTLP, then Prometheus scrapes collector)
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+    namespace: otel
+    const_labels:
+      env: local
+
+  # Logs → Elasticsearch (for querying in Grafana)
+  elasticsearch:
+    endpoints: [http://elasticsearch:9200]
+    logs_index: otel-logs
+
+  # Optional: debug logging
+  debug:
+    verbosity: basic
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger, debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus, debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [elasticsearch, debug]

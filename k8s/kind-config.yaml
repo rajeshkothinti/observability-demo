@@ -1,0 +1,37 @@
+# Kind cluster configuration
+# Minimal setup for local development
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: observability
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      # Application services
+      - containerPort: 30000
+        hostPort: 8000
+        protocol: TCP
+      - containerPort: 30080
+        hostPort: 8080
+        protocol: TCP
+      - containerPort: 30081
+        hostPort: 8081
+        protocol: TCP
+      - containerPort: 30082
+        hostPort: 8082
+        protocol: TCP
+      # Observability
+      - containerPort: 30090
+        hostPort: 9090
+        protocol: TCP
+      - containerPort: 30686
+        hostPort: 16686
+        protocol: TCP
+      - containerPort: 30300
+        hostPort: 3000
+        protocol: TCP
