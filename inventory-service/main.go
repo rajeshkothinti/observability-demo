@@ -43,10 +43,18 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
+
+	"inventory-service/store"
 )
 
-const serviceName = "inventory-service"
-
+var (
+	serviceName = func() string {
+		if n := os.Getenv("OTEL_SERVICE_NAME"); n != "" {
+			return n
+		}
+		return "inventory-service"
+	}()
+)
 var appLogger otellog.Logger
 
 // --- Models ---
@@ -153,6 +161,10 @@ func main() {
 	defer func() { _ = lp.Shutdown(ctx) }()
 	appLogger = logger
 
+	if err := store.Init(ctx); err != nil {
+		log.Printf("WARNING: store init failed (will use in-memory): %v", err)
+	}
+
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
@@ -224,10 +236,6 @@ func productsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func listProducts(w http.ResponseWriter, r *http.Request, span trace.Span) {
-	mu.RLock()
-	defer mu.RUnlock()
-
-	// Pagination
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	if page < 1 {
 		page = 1
@@ -237,13 +245,32 @@ func listProducts(w http.ResponseWriter, r *http.Request, span trace.Span) {
 		pageSize = 10
 	}
 
-	// Convert to slice and sort
+	if store.Pool != nil {
+		list, total, err := store.ListProducts(r.Context(), page, pageSize)
+		if err != nil {
+			writeError(w, r, http.StatusInternalServerError, "Database Error", err.Error())
+			return
+		}
+		span.SetAttributes(attribute.Int("products.count", len(list)))
+		emitLog(r.Context(), appLogger, otellog.SeverityInfo, fmt.Sprintf("Listed %d products", len(list)))
+		links := Links{"self": fmt.Sprintf("/api/v1/products?page=%d&page_size=%d", page, pageSize)}
+		if page > 1 {
+			links["prev"] = fmt.Sprintf("/api/v1/products?page=%d&page_size=%d", page-1, pageSize)
+		}
+		if (page-1)*pageSize+len(list) < total {
+			links["next"] = fmt.Sprintf("/api/v1/products?page=%d&page_size=%d", page+1, pageSize)
+		}
+		writeJSON(w, http.StatusOK, PaginatedResponse{Data: list, Total: total, Page: page, PageSize: pageSize, Links: links})
+		return
+	}
+
+	mu.RLock()
+	defer mu.RUnlock()
 	all := make([]*Product, 0, len(products))
 	for _, p := range products {
 		p.Links = Links{"self": fmt.Sprintf("/api/v1/products/%s", p.ID)}
 		all = append(all, p)
 	}
-
 	total := len(all)
 	start := (page - 1) * pageSize
 	end := start + pageSize
@@ -281,15 +308,23 @@ func createProduct(w http.ResponseWriter, r *http.Request, span trace.Span) {
 		writeError(w, r, http.StatusBadRequest, "Invalid JSON", err.Error())
 		return
 	}
-
 	if p.Name == "" {
 		writeError(w, r, http.StatusBadRequest, "Validation Error", "name is required")
 		return
 	}
-
+	if store.Pool != nil {
+		sp := &store.Product{Name: p.Name, Description: p.Description, Price: p.Price, Stock: p.Stock}
+		if err := store.CreateProduct(r.Context(), sp); err != nil {
+			writeError(w, r, http.StatusInternalServerError, "Database Error", err.Error())
+			return
+		}
+		span.SetAttributes(attribute.String("product.id", sp.ID))
+		emitLog(r.Context(), appLogger, otellog.SeverityInfo, fmt.Sprintf("Created product %s", sp.ID))
+		writeJSON(w, http.StatusCreated, sp)
+		return
+	}
 	mu.Lock()
 	defer mu.Unlock()
-
 	p.ID = "prod-" + uuid.New().String()[:8]
 	p.CreatedAt = time.Now()
 	p.UpdatedAt = time.Now()
@@ -328,9 +363,17 @@ func productByIDHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getProduct(w http.ResponseWriter, r *http.Request, id string, span trace.Span) {
+	if store.Pool != nil {
+		p, err := store.GetProduct(r.Context(), id)
+		if err != nil {
+			writeError(w, r, http.StatusNotFound, "Not Found", fmt.Sprintf("Product %s not found", id))
+			return
+		}
+		writeJSON(w, http.StatusOK, p)
+		return
+	}
 	mu.RLock()
 	defer mu.RUnlock()
-
 	p, ok := products[id]
 	if !ok {
 		writeError(w, r, http.StatusNotFound, "Not Found", fmt.Sprintf("Product %s not found", id))
@@ -346,16 +389,23 @@ func updateProduct(w http.ResponseWriter, r *http.Request, id string, span trace
 		writeError(w, r, http.StatusBadRequest, "Invalid JSON", err.Error())
 		return
 	}
-
+	if store.Pool != nil {
+		p, err := store.UpdateProduct(r.Context(), id, update.Name, update.Description, update.Price, update.Stock)
+		if err != nil {
+			writeError(w, r, http.StatusNotFound, "Not Found", fmt.Sprintf("Product %s not found", id))
+			return
+		}
+		emitLog(r.Context(), appLogger, otellog.SeverityInfo, fmt.Sprintf("Updated product %s", id))
+		writeJSON(w, http.StatusOK, p)
+		return
+	}
 	mu.Lock()
 	defer mu.Unlock()
-
 	p, ok := products[id]
 	if !ok {
 		writeError(w, r, http.StatusNotFound, "Not Found", fmt.Sprintf("Product %s not found", id))
 		return
 	}
-
 	if update.Name != "" {
 		p.Name = update.Name
 	}
@@ -370,15 +420,22 @@ func updateProduct(w http.ResponseWriter, r *http.Request, id string, span trace
 	}
 	p.UpdatedAt = time.Now()
 	p.Links = Links{"self": fmt.Sprintf("/api/v1/products/%s", p.ID)}
-
 	emitLog(r.Context(), appLogger, otellog.SeverityInfo, fmt.Sprintf("Updated product %s", id))
 	writeJSON(w, http.StatusOK, p)
 }
 
 func deleteProduct(w http.ResponseWriter, r *http.Request, id string, span trace.Span) {
+	if store.Pool != nil {
+		if err := store.DeleteProduct(r.Context(), id); err != nil {
+			writeError(w, r, http.StatusNotFound, "Not Found", fmt.Sprintf("Product %s not found", id))
+			return
+		}
+		emitLog(r.Context(), appLogger, otellog.SeverityInfo, fmt.Sprintf("Deleted product %s", id))
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	mu.Lock()
 	defer mu.Unlock()
-
 	if _, ok := products[id]; !ok {
 		writeError(w, r, http.StatusNotFound, "Not Found", fmt.Sprintf("Product %s not found", id))
 		return
@@ -393,26 +450,39 @@ func reserveHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusMethodNotAllowed, "Method Not Allowed", "Use POST")
 		return
 	}
-
 	ctx := r.Context()
 	_, span := otel.Tracer(serviceName).Start(ctx, "reserve_inventory")
 	defer span.End()
-
 	var req ReserveRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, r, http.StatusBadRequest, "Invalid JSON", err.Error())
 		return
 	}
-
 	if req.OrderID == "" || len(req.Items) == 0 {
 		writeError(w, r, http.StatusBadRequest, "Validation Error", "order_id and items are required")
 		return
 	}
-
+	if store.Pool != nil {
+		items := make([]store.ReservationItem, len(req.Items))
+		for i, it := range req.Items {
+			items[i] = store.ReservationItem{ProductID: it.ProductID, Quantity: it.Quantity}
+		}
+		res, err := store.Reserve(ctx, req.OrderID, items)
+		if err != nil {
+			if strings.Contains(err.Error(), "insufficient stock") {
+				writeError(w, r, http.StatusConflict, "Insufficient Stock", err.Error())
+				return
+			}
+			writeError(w, r, http.StatusBadRequest, "Reserve Failed", err.Error())
+			return
+		}
+		span.SetAttributes(attribute.String("reservation.id", res.ID), attribute.String("order.id", req.OrderID))
+		emitLog(ctx, appLogger, otellog.SeverityInfo, fmt.Sprintf("Reserved inventory for order %s", req.OrderID))
+		writeJSON(w, http.StatusCreated, res)
+		return
+	}
 	mu.Lock()
 	defer mu.Unlock()
-
-	// Check stock availability
 	for _, item := range req.Items {
 		p, ok := products[item.ProductID]
 		if !ok {
@@ -424,12 +494,9 @@ func reserveHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-
-	// Reserve stock
 	for _, item := range req.Items {
 		products[item.ProductID].Stock -= item.Quantity
 	}
-
 	reservation := &Reservation{
 		ID:        "res-" + uuid.New().String()[:8],
 		OrderID:   req.OrderID,
@@ -440,13 +507,8 @@ func reserveHandler(w http.ResponseWriter, r *http.Request) {
 		Links:     Links{"self": fmt.Sprintf("/api/v1/inventory/reservations/%s", "res-"+uuid.New().String()[:8])},
 	}
 	reservations[reservation.ID] = reservation
-
-	span.SetAttributes(
-		attribute.String("reservation.id", reservation.ID),
-		attribute.String("order.id", req.OrderID),
-	)
+	span.SetAttributes(attribute.String("reservation.id", reservation.ID), attribute.String("order.id", req.OrderID))
 	emitLog(ctx, appLogger, otellog.SeverityInfo, fmt.Sprintf("Reserved inventory for order %s", req.OrderID))
-
 	writeJSON(w, http.StatusCreated, reservation)
 }
 
@@ -455,11 +517,9 @@ func releaseHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusMethodNotAllowed, "Method Not Allowed", "Use POST")
 		return
 	}
-
 	ctx := r.Context()
 	_, span := otel.Tracer(serviceName).Start(ctx, "release_inventory")
 	defer span.End()
-
 	var req struct {
 		ReservationID string `json:"reservation_id"`
 	}
@@ -467,27 +527,32 @@ func releaseHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, "Invalid JSON", err.Error())
 		return
 	}
-
+	if store.Pool != nil {
+		res, err := store.Release(ctx, req.ReservationID)
+		if err != nil {
+			writeError(w, r, http.StatusNotFound, "Not Found", fmt.Sprintf("Reservation %s not found", req.ReservationID))
+			return
+		}
+		span.SetAttributes(attribute.String("reservation.id", req.ReservationID))
+		emitLog(ctx, appLogger, otellog.SeverityInfo, fmt.Sprintf("Released reservation %s", req.ReservationID))
+		writeJSON(w, http.StatusOK, res)
+		return
+	}
 	mu.Lock()
 	defer mu.Unlock()
-
 	res, ok := reservations[req.ReservationID]
 	if !ok {
 		writeError(w, r, http.StatusNotFound, "Not Found", fmt.Sprintf("Reservation %s not found", req.ReservationID))
 		return
 	}
-
-	// Release stock
 	for _, item := range res.Items {
 		if p, ok := products[item.ProductID]; ok {
 			p.Stock += item.Quantity
 		}
 	}
 	res.Status = "released"
-
 	span.SetAttributes(attribute.String("reservation.id", req.ReservationID))
 	emitLog(ctx, appLogger, otellog.SeverityInfo, fmt.Sprintf("Released reservation %s", req.ReservationID))
-
 	writeJSON(w, http.StatusOK, res)
 }
 

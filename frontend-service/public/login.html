@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login – Observability Demo Shop</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>Observability Demo Shop</h1>
+    <p>Log in to your account</p>
+  </header>
+
+  <main class="main">
+    <section class="section auth-section">
+      <h2>Login</h2>
+      <form id="login-form" class="auth-form">
+        <label>Email <input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /></label>
+        <label>Password <input type="password" name="password" placeholder="••••••••" required autocomplete="current-password" /></label>
+        <div id="login-error" class="error" hidden></div>
+        <button type="submit">Log in</button>
+      </form>
+      <p class="auth-footer">Don't have an account? <a href="/signup.html">Sign up</a>. <a href="/">Back to home</a>.</p>
+    </section>
+  </main>
+
+  <script src="/auth.js"></script>
+  <script>
+    if (redirectIfLoggedIn()) throw new Error('redirect');
+    const form = document.getElementById('login-form');
+    const errEl = document.getElementById('login-error');
+    const params = new URLSearchParams(location.search);
+    const redirect = params.get('redirect') || '/products.html';
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errEl.hidden = true;
+      const email = form.email.value.trim();
+      const password = form.password.value;
+      try {
+        const r = await authFetch('/api/auth/login', { method: 'POST', body: { email, password } });
+        const data = await r.json();
+        if (!r.ok) {
+          errEl.textContent = data.error || 'Login failed';
+          errEl.hidden = false;
+          return;
+        }
+        setAuth(data.user, data.token);
+        window.location.href = redirect;
+      } catch (err) {
+        errEl.textContent = 'Network error. Please try again.';
+        errEl.hidden = false;
+      }
+    });
+  </script>
+</body>
+</html>

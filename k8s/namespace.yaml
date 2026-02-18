@@ -4,3 +4,5 @@ metadata:
   name: observability
   labels:
     name: observability
+    # Istio: enable sidecar injection so apps, collector, postgres get envoy proxy and mTLS
+    istio-injection: enabled

@@ -1,0 +1,105 @@
+# Postgres: StatefulSet with persistent storage for order, inventory, and frontend services.
+# Local Kind: credentials in Secret below for a working out-of-the-box setup.
+# For production/EKS use Sealed Secrets or external secret store (see k8s/sealed/README.md).
+#
+# Storage:
+# - Local (Kind): apply k8s/kind-postgres-storage.yaml first (hostPath PV), then this file.
+# - EKS: set storageClassName in volumeClaimTemplate to "gp3" or remove for cluster default.
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-credentials
+  namespace: observability
+type: Opaque
+stringData:
+  POSTGRES_USER: app
+  POSTGRES_PASSWORD: appsecret
+  POSTGRES_DB: observability_demo
+  DATABASE_URL: "postgresql://app:appsecret@postgres:5432/observability_demo"
+---
+# Headless service for StatefulSet (stable DNS: postgres-0.postgres.observability.svc.cluster.local)
+# Also used by apps as "postgres:5432"
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: observability
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: observability
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_DB
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "app", "-d", "observability_demo"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "app", "-d", "observability_demo"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+        # Local Kind: use storageClassName from kind-postgres-storage.yaml (kind-local).
+        # EKS: set to "gp3" or your default StorageClass, or remove to use cluster default.
+        storageClassName: kind-local

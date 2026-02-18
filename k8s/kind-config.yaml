@@ -25,6 +25,9 @@ nodes:
       - containerPort: 30082
         hostPort: 8082
         protocol: TCP
+      - containerPort: 30001
+        hostPort: 3001
+        protocol: TCP
       # Observability
       - containerPort: 30090
         hostPort: 9090

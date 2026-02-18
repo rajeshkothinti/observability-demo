@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: java-service
+    name: ${OTEL_SERVICE_NAME:payment-service}
 
 # OpenTelemetry OTLP (traces) - Boot 3.2 uses HTTP by default; collector HTTP :4318
 management:
@@ -21,4 +21,4 @@ management:
 # Service name for traces (W3C propagation is default in Boot 3)
 otel:
   resource:
-    attributes: service.name=java-service
+    attributes: service.name=${OTEL_SERVICE_NAME:payment-service}

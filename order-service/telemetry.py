@@ -21,7 +21,8 @@ OTEL_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317"
 
 
 def _resource():
-    return Resource(attributes={SERVICE_NAME: "python-service"})
+    service_name = os.getenv("OTEL_SERVICE_NAME", "order-service")
+    return Resource(attributes={SERVICE_NAME: service_name})
 
 
 def setup_tracing(app=None):
@@ -31,7 +32,8 @@ def setup_tracing(app=None):
     if app:
         FastAPIInstrumentor.instrument_app(app)
     HTTPXClientInstrumentor().instrument()
-    return trace.get_tracer("python-service", "1.0.0")
+    service_name = os.getenv("OTEL_SERVICE_NAME", "order-service")
+    return trace.get_tracer(service_name, "1.0.0")
 
 
 def setup_metrics():
@@ -41,7 +43,8 @@ def setup_metrics():
     )
     provider = MeterProvider(resource=_resource(), metric_readers=[reader])
     metrics.set_meter_provider(provider)
-    return metrics.get_meter("python-service", "1.0.0")
+    service_name = os.getenv("OTEL_SERVICE_NAME", "order-service")
+    return metrics.get_meter(service_name, "1.0.0")
 
 
 def setup_logging():

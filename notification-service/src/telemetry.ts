@@ -16,9 +16,10 @@ const traceExporter = new OTLPTraceExporter({
   url: grpcEndpoint,
 });
 
+const serviceName = process.env.OTEL_SERVICE_NAME || 'notification-service';
 const sdk = new NodeSDK({
   resource: new Resource({
-    [SEMRESATTRS_SERVICE_NAME]: 'node-service',
+    [SEMRESATTRS_SERVICE_NAME]: serviceName,
   }),
   traceExporter,
   instrumentations: [getNodeAutoInstrumentations()],

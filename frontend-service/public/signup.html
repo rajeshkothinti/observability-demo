@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign up – Observability Demo Shop</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>Observability Demo Shop</h1>
+    <p>Create an account</p>
+  </header>
+
+  <main class="main">
+    <section class="section auth-section">
+      <h2>Sign up</h2>
+      <form id="signup-form" class="auth-form">
+        <label>Name <input type="text" name="name" placeholder="Your name" required autocomplete="name" /></label>
+        <label>Email <input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /></label>
+        <label>Password <input type="password" name="password" placeholder="••••••••" required minlength="6" autocomplete="new-password" /></label>
+        <label>Confirm password <input type="password" name="password_confirm" placeholder="••••••••" required minlength="6" autocomplete="new-password" /></label>
+        <div id="signup-error" class="error" hidden></div>
+        <button type="submit">Create account</button>
+      </form>
+      <p class="auth-footer">Already have an account? <a href="/login.html">Log in</a>. <a href="/">Back to home</a>.</p>
+    </section>
+  </main>
+
+  <script src="/auth.js"></script>
+  <script>
+    if (redirectIfLoggedIn()) throw new Error('redirect');
+    const form = document.getElementById('signup-form');
+    const errEl = document.getElementById('signup-error');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errEl.hidden = true;
+      if (form.password.value !== form.password_confirm.value) {
+        errEl.textContent = 'Passwords do not match';
+        errEl.hidden = false;
+        return;
+      }
+      const name = form.name.value.trim();
+      const email = form.email.value.trim();
+      const password = form.password.value;
+      try {
+        const r = await authFetch('/api/auth/signup', { method: 'POST', body: { email, password, name } });
+        const data = await r.json();
+        if (!r.ok) {
+          errEl.textContent = data.error || 'Sign up failed';
+          errEl.hidden = false;
+          return;
+        }
+        setAuth(data.user, data.token);
+        window.location.href = '/products.html';
+      } catch (err) {
+        errEl.textContent = 'Network error. Please try again.';
+        errEl.hidden = false;
+      }
+    });
+  </script>
+</body>
+</html>

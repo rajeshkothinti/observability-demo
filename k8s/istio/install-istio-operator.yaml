@@ -1,0 +1,26 @@
+# IstioOperator: use with istioctl install -f k8s/istio/install-istio-operator.yaml -y
+# Installs Istio control plane (default profile). For Kind, ingress gateway uses NodePort.
+apiVersion: install.istio.io/v1alpha1
+kind: IstioOperator
+metadata:
+  name: observability-istio
+  namespace: istio-system
+spec:
+  profile: default
+  components:
+    ingressGateways:
+      - name: istio-ingressgateway
+        enabled: true
+        k8s:
+          service:
+            type: NodePort
+  values:
+    global:
+      proxy:
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi

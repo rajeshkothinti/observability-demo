@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Checkout – Observability Demo Shop</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>Observability Demo Shop</h1>
+    <p>Checkout</p>
+    <nav class="header-nav">
+      <span class="user-name" id="nav-user-name"></span> <a href="/profile.html">Profile</a> <a href="/products.html">Products</a> <a href="#" id="nav-logout">Log out</a>
+    </nav>
+  </header>
+
+  <main class="main">
+    <section class="section">
+      <h2>Your order</h2>
+      <div id="cart-items"></div>
+      <p id="cart-empty" class="hint" hidden>Your cart is empty. <a href="/products.html">Add products</a>.</p>
+      <form id="order-form" class="order-form" hidden>
+        <fieldset>
+          <legend>Customer</legend>
+          <label>Customer ID <input type="text" name="customer_id" required /></label>
+          <label>Email <input type="email" name="email" required /></label>
+          <label>Name <input type="text" name="name" required /></label>
+        </fieldset>
+        <button type="submit" id="submit-order">Place order</button>
+      </form>
+      <div id="order-result" class="order-result" hidden></div>
+    </section>
+  </main>
+
+  <script src="/auth.js"></script>
+  <script src="/cart.js"></script>
+  <script src="/checkout.js"></script>
+</body>
+</html>

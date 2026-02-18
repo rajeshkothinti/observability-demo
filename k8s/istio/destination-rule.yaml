@@ -1,0 +1,12 @@
+# Explicitly use Istio mTLS for traffic in the observability namespace.
+# With PeerAuthentication STRICT this is the default; this makes it explicit and allows per-host overrides later.
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: default-mtls
+  namespace: observability
+spec:
+  host: "*.observability.svc.cluster.local"
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL

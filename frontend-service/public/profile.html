@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Profile – Observability Demo Shop</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>Observability Demo Shop</h1>
+    <p>Your profile</p>
+  </header>
+
+  <main class="main">
+    <section class="section auth-section">
+      <h2>Profile</h2>
+      <form id="profile-form" class="auth-form">
+        <label>Name <input type="text" name="name" placeholder="Your name" required autocomplete="name" /></label>
+        <label>Email <input type="email" name="email" placeholder="you@example.com" required autocomplete="email" /></label>
+        <div id="profile-error" class="error" hidden></div>
+        <div id="profile-success" class="success" hidden></div>
+        <button type="submit">Save changes</button>
+      </form>
+      <p class="auth-footer"><a href="/products.html">Products</a> · <a href="/">Home</a> · <a href="#" id="logout-link">Log out</a>.</p>
+    </section>
+  </main>
+
+  <script src="/auth.js"></script>
+  <script>
+    if (!requireAuth()) throw new Error('redirect');
+    const form = document.getElementById('profile-form');
+    const errEl = document.getElementById('profile-error');
+    const successEl = document.getElementById('profile-success');
+    const user = getUser();
+    if (user) {
+      form.name.value = user.name || '';
+      form.email.value = user.email || '';
+    }
+
+    document.getElementById('logout-link').addEventListener('click', (e) => {
+      e.preventDefault();
+      clearAuth();
+      window.location.href = '/login.html';
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errEl.hidden = true;
+      successEl.hidden = true;
+      const name = form.name.value.trim();
+      const email = form.email.value.trim();
+      try {
+        const r = await authFetch('/api/auth/profile', { method: 'PUT', body: { name, email } });
+        const data = await r.json();
+        if (!r.ok) {
+          errEl.textContent = data.error || 'Update failed';
+          errEl.hidden = false;
+          return;
+        }
+        setAuth(data, getToken());
+        successEl.textContent = 'Profile updated.';
+        successEl.hidden = false;
+      } catch (err) {
+        errEl.textContent = 'Network error. Please try again.';
+        errEl.hidden = false;
+      }
+    });
+  </script>
+</body>
+</html>

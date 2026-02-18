@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Home – Observability Demo Shop</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="header">
+    <h1>Observability Demo Shop</h1>
+    <p>Welcome</p>
+  </header>
+
+  <main class="main">
+    <section class="section home-section">
+      <h2>Log in or sign up</h2>
+      <p class="home-intro">Sign in to browse products and place orders.</p>
+      <div class="home-actions">
+        <a href="/login.html" class="btn btn-primary">Log in</a>
+        <a href="/signup.html" class="btn btn-secondary">Sign up</a>
+      </div>
+    </section>
+  </main>
+
+  <script src="/auth.js"></script>
+  <script>
+    if (typeof redirectIfLoggedIn === 'function' && redirectIfLoggedIn()) {
+      window.location.href = '/products.html';
+    }
+  </script>
+</body>
+</html>

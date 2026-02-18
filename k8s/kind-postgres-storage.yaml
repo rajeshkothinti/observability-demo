@@ -1,0 +1,34 @@
+# Local Kind only: StorageClass + PV so Postgres StatefulSet PVC can bind.
+# Apply this before k8s/postgres.yaml when using Kind.
+# Not needed on EKS (use cluster default or gp3).
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: kind-local
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: Immediate
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-data-kind
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: kind-local
+  hostPath:
+    path: /data/postgres
+    type: DirectoryOrCreate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - observability-control-plane

@@ -1,0 +1,20 @@
+# Enforce mTLS between all workloads in the observability namespace.
+# Apps, otel-collector, postgres, jaeger, prometheus, etc. will use Istio-issued certs.
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: observability
+spec:
+  mtls:
+    mode: STRICT
+---
+# Optional: same for istio-system if you want mTLS to ingress gateway
+# apiVersion: security.istio.io/v1beta1
+# kind: PeerAuthentication
+# metadata:
+#   name: default
+#   namespace: istio-system
+# spec:
+#   mtls:
+#     mode: STRICT

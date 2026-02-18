@@ -25,9 +25,10 @@ from opentelemetry import trace
 
 from models import (
     CreateOrderRequest, ErrorResponse, OrderListResponse,
-    OrderResponse, OrderStatus, generate_order_id, orders_db
+    OrderResponse, OrderStatus, generate_order_id,
 )
 from telemetry import init_telemetry
+from database import init_db, order_save, order_get, order_list, order_count
 
 # FastAPI app with metadata for OpenAPI docs
 app = FastAPI(
@@ -41,6 +42,13 @@ app = FastAPI(
 
 tracer, meter = init_telemetry(app)
 logger = logging.getLogger(__name__)
+
+
+@app.on_event("startup")
+def startup():
+    """Initialize DB table when DATABASE_URL is set (kind-local)."""
+    init_db()
+
 
 # Service URLs
 GO_SERVICE_URL = os.getenv("INVENTORY_SERVICE_URL", os.getenv("GO_SERVICE_URL", "http://localhost:8080"))
@@ -153,7 +161,7 @@ async def create_order(order_request: CreateOrderRequest, request: Request):
             "payment_id": None,
             "notification_id": None,
         }
-        orders_db[order_id] = order
+        order_save(order)
         logger.info(f"Order {order_id} created, total: ${total_amount:.2f}")
         
         # Step 1: Reserve Inventory
@@ -175,7 +183,7 @@ async def create_order(order_request: CreateOrderRequest, request: Request):
                     else:
                         inv_span.set_attribute("error", True)
                         order["status"] = OrderStatus.FAILED
-                        orders_db[order_id] = order
+                        order_save(order)
                         raise HTTPException(status_code=400, detail=f"Inventory reservation failed: {r.text}")
             except httpx.RequestError as e:
                 inv_span.record_exception(e)
@@ -206,7 +214,7 @@ async def create_order(order_request: CreateOrderRequest, request: Request):
                         pay_span.set_attribute("error", True)
                         # Rollback: release inventory
                         order["status"] = OrderStatus.FAILED
-                        orders_db[order_id] = order
+                        order_save(order)
                         raise HTTPException(status_code=400, detail=f"Payment failed: {r.text}")
             except httpx.RequestError as e:
                 pay_span.record_exception(e)
@@ -241,7 +249,7 @@ async def create_order(order_request: CreateOrderRequest, request: Request):
         # Finalize order
         order["status"] = OrderStatus.CONFIRMED
         order["updated_at"] = datetime.utcnow()
-        orders_db[order_id] = order
+        order_save(order)
         
         order_counter.add(1, {"status": "confirmed"})
         duration_ms = (datetime.utcnow() - start_time).total_seconds() * 1000
@@ -275,21 +283,9 @@ async def list_orders(
     """List orders with pagination and filtering."""
     request_counter.add(1, {"endpoint": "list_orders", "method": "GET"})
     
-    # Filter orders
-    filtered = list(orders_db.values())
-    if customer_id:
-        filtered = [o for o in filtered if o["customer"]["customer_id"] == customer_id]
-    if status:
-        filtered = [o for o in filtered if o["status"] == status]
-    
-    # Sort by created_at descending
-    filtered.sort(key=lambda x: x["created_at"], reverse=True)
-    
-    # Paginate
-    total = len(filtered)
+    total = order_count(customer_id=customer_id, status=status)
     start = (page - 1) * page_size
-    end = start + page_size
-    page_data = filtered[start:end]
+    page_data = order_list(customer_id=customer_id, status=status, limit=page_size, offset=start)
     
     # Add links to each order
     base_url = str(request.base_url).rstrip("/")
@@ -300,7 +296,7 @@ async def list_orders(
     links = {"self": f"{base_url}/api/v1/orders?page={page}&page_size={page_size}"}
     if page > 1:
         links["prev"] = f"{base_url}/api/v1/orders?page={page-1}&page_size={page_size}"
-    if end < total:
+    if start + len(page_data) < total:
         links["next"] = f"{base_url}/api/v1/orders?page={page+1}&page_size={page_size}"
     
     return OrderListResponse(
@@ -323,10 +319,10 @@ async def get_order(order_id: str, request: Request):
     """Get a specific order by ID."""
     request_counter.add(1, {"endpoint": "get_order", "method": "GET"})
     
-    if order_id not in orders_db:
+    order = order_get(order_id)
+    if not order:
         raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
-    
-    order = orders_db[order_id].copy()
+    order = order.copy()
     base_url = str(request.base_url).rstrip("/")
     order["links"] = {
         "self": f"{base_url}/api/v1/orders/{order_id}",
@@ -346,10 +342,9 @@ async def cancel_order(order_id: str, request: Request):
     """Cancel an order."""
     request_counter.add(1, {"endpoint": "cancel_order", "method": "POST"})
     
-    if order_id not in orders_db:
+    order = order_get(order_id)
+    if not order:
         raise HTTPException(status_code=404, detail=f"Order {order_id} not found")
-    
-    order = orders_db[order_id]
     if order["status"] == OrderStatus.CANCELLED:
         raise HTTPException(status_code=400, detail="Order already cancelled")
     
@@ -359,7 +354,7 @@ async def cancel_order(order_id: str, request: Request):
         # In production: release inventory, refund payment
         order["status"] = OrderStatus.CANCELLED
         order["updated_at"] = datetime.utcnow()
-        orders_db[order_id] = order
+        order_save(order)
         logger.info(f"Order {order_id} cancelled")
     
     base_url = str(request.base_url).rstrip("/")
